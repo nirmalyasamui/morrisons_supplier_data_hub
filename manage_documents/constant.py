@@ -1,0 +1,39 @@
+HTTP_METHOD_GET = 'GET'
+HTTP_METHOD_POST = 'POST'
+HTTP_METHOD_OPTIONS = 'OPTIONS'
+HTTP_METHOD_DELETE = 'DELETE'
+
+SUCCESS_CODE = 200
+OPTIONS_SUCCESS = 204
+ERROR_CODE_METHOD_NOT_SUPPORTED = 405
+ERROR_CODE_INTERNAL_ERROR = 500
+
+ERROR_METHOD_NOT_SUPPORTED = 'API Method not supported'
+ERROR_INTERNAL_SERVER = 'Internal server error'
+ERROR_NO_DATA_FOUND = 'No data found for the given parameters'
+ERROR_CLIENT_ERROR_BAD_REQUEST = 'Client Error, bad request'
+EXCEPTION ='exception - {}'
+
+DOCUMENTS_COLLECTION = 'DOCUMENTS_COLLECTION'
+CATEGORY_COLLECTION = 'CATEGORY_COLLECTION'
+MESSAGE = 'message'
+SUCCESS_MESSAGE = 'success'
+DOCUMENT_ID = 'documentID'
+FILTERS = 'filters'
+PATH = 'path'
+METHOD = 'method'
+CATEGORY = 'category'
+DOCUMENT ='The document \"'
+SUCCESS_TXT = '\" was updated successfully'
+DEFAULT_DATE_FORMAT = "%Y-%m-%d"
+
+COMPANY_ID = 'companyID'
+GROUP_ID = 'groupID'
+DOC_CATEGORY = 'category'
+DOC_SUB_CATEGORY = 'subCategory'
+DOC_NAME = 'documentName'
+OFFSET = 'offset'
+LIMIT = 'limit'
+SORT_BY = 'sortBy'
+SORT_DIRECTION = 'sortDirection'
+SORT_DIRECTION_DEFAULT = 'ASC'

@@ -1,0 +1,279 @@
+SELECT distinct A.* FROM (  
+SELECT  
+CAST(bq.PURCHASE_ORDER_NUMBER as STRING) ,
+CAST(bq.ORDER_DATE as STRING),
+cast(bq.LOCATION_ID as STRING),
+CAST(bq.LOCATION_NAME as STRING),
+cast(bq.SKU_ITEM_NBR as STRING),
+CAST(bq.TUC as STRING) ,
+cast(bq.ITEM_NAME AS STRING),
+cast(bq.ORDR_QTY as STRING),
+cast(bq.RECEIVED_QUANTITY as STRING),
+cast(bq.PERCENTAGE_DELIVERED as STRING),
+cast(bq.PURCHASE_ORDER_STATUS as STRING),
+cast(bq.SCHEDULED_DELIVERY_DATE as STRING),
+cast(bq.SCHEDULED_DELIVERY_TIME as STRING),
+--cast(bq.FINAL_CASES_PERCENT_DELIVERED as STRING),
+--cast(bq.FINAL_LINES_DELIVERED as STRING),
+--cast(bq.FINAL_CASES_DELIVERED as STRING),
+--cast(bq.SHORT_PERCENT as STRING),
+--cast(bq.OVER_PERCENT as STRING),
+
+'BCK-CSV' AS MISMATCH
+FROM
+(SELECT distinct
+                pchse_ordr_nbr PURCHASE_ORDER_NUMBER,
+                SUBSTR(CAST(orgnl_ordr_dt_key AS STRING), 7, 2) ||
+                       "/"||SUBSTR(CAST(orgnl_ordr_dt_key AS STRING), 5, 2) ||
+                       "/"||SUBSTR(CAST(orgnl_ordr_dt_key AS STRING), 1, 4)
+                ORDER_DATE,
+                bsns_unit_cd LOCATION_ID,
+                location_long_name LOCATION_NAME,
+                sku_item_nbr SKU_ITEM_NBR,
+                t.tuc TUC,
+                item_description ITEM_NAME,
+                (CASE WHEN CNCL_DT_KEY >= SCHL_DLVRY_DT_KEY THEN (IFNULL(ORDR_QTY,0) + IFNULL(CNCL_QTY,0)) ELSE IFNULL(ORDR_QTY,0) END) ORDR_QTY,
+                CASE
+                    WHEN QTY_RECEIVED_REPORTED IS NULL THEN 0
+                    ELSE QTY_RECEIVED_REPORTED
+                END AS RECEIVED_QUANTITY,
+                CASE
+                    WHEN QTY_RECEIVED_REPORTED IS NULL OR QTY_RECEIVED_REPORTED = 0 THEN "0 %"
+                    ELSE CONCAT(CAST(ROUND(((QTY_RECEIVED_REPORTED) / (CASE WHEN CNCL_DT_KEY >= SCHL_DLVRY_DT_KEY THEN (IFNULL(ORDR_QTY,0) + IFNULL(CNCL_QTY,0)) ELSE IFNULL(ORDR_QTY,0) END))* 100, 2)  AS STRING)," %")
+                END AS PERCENTAGE_DELIVERED,
+                purchase_order_status_map.pchse_ordr_status_desc PURCHASE_ORDER_STATUS,
+                 SUBSTR(CAST(DATE(schl_dlvry_dt) AS STRING), 9, 2) ||
+                       "/"||SUBSTR(CAST(DATE(schl_dlvry_dt) AS STRING), 6, 2) ||
+                       "/"||SUBSTR(CAST(DATE(schl_dlvry_dt) AS STRING), 1, 4) SCHEDULED_DELIVERY_DATE,
+                CAST(TIME(schl_dlvry_dt) AS STRING) SCHEDULED_DELIVERY_TIME
+             FROM
+                data-integration-uat.source_data_partitioned.DWV_X_PO_ITEM_STATE_GCP purchaseOrder,
+                data-integration-uat.supply_chain_tables.Item_Supplier_TUC t,
+                data-integration-uat.data_marts_dimensions.DIM_LOCATION_CURRENT location,
+                data-integration-uat.data_marts_dimensions.DIM_PRODUCT_CURRENT product,
+                data-supplierdatahub-sit.references.DWR_VNDR_ITEM dwr_vndr_item,
+                data-supplierdatahub-sit.references.purchase_order_status_map purchase_order_status_map
+             WHERE
+                DATE(purchaseOrder.trx_dt) >= "2022-10-25"
+                AND DATE(purchaseOrder.trx_dt) <= "2022-11-05"
+                AND CAST(purchaseOrder.bsns_unit_cd AS INT64) = CAST(location.location_id AS INT64)
+                AND CAST(purchaseOrder.sku_item_nbr AS INT64) = CAST(product.sku_item_number AS INT64)
+                AND CAST(t.ITEM AS INT64) = CAST(purchaseOrder.sku_item_nbr AS INT64)
+                AND t.ebs_supplier_number=CAST("1001904"  AS INT64)
+                AND dwr_vndr_item.vndr_item_nbr = product.sku_item_number
+                AND DATE(purchaseOrder.trx_dt) = dwr_vndr_item.ACTIVE_DATE
+                AND UPPER(purchase_order_status_map.pchse_ordr_status) = UPPER(purchaseOrder.pchse_ordr_status)
+                AND ORDR_QTY_REPORTED > 0
+                AND purchaseOrder.pchse_ordr_status IS NOT NULL
+                AND UPPER(location.location_id) IS NOT NULL
+                AND UPPER(IFNULL(purchaseOrder.sku_item_nbr,"NULLVALUE")) IS NOT NULL
+                AND UPPER(location.status_code) != "I"
+                AND dwr_vndr_item.vndr_nbr = "1001904"
+                AND purchaseOrder.VNDR_NBR = "1001904"
+            ORDER BY
+                order_date DESC,purchase_Order_Number ASC
+) bq
+
+LEFT OUTER JOIN
+(
+SELECT cast(sales.PURCHASE_ORDER_NUMBER as STRING) PURCHASE_ORDER_NUMBER,
+cast(sales.ORDER_DATE as STRING) ORDER_DATE,
+cast(sales.LOCATION_ID as STRING) LOCATION_ID,
+cast(sales.LOCATION_NAME as STRING) LOCATION_NAME,
+cast(sales.ITEM_NUMBER as STRING) ITEM_NUMBER,
+    cast(sales.TUC as STRING) TUC,
+cast(sales.ITEM_DESCRIPTION as STRING) ITEM_DESCRIPTION,
+    cast(sales.CASES_ORDER as STRING) CASES_ORDER,
+cast(sales.CASES_DELIVERED as STRING) CASES_DELIVERED,
+cast(sales.PERCENTAGE_DELIVERED as STRING) PERCENTAGE_DELIVERED,
+cast(sales.PURCHASE_ORDER_STATUS_DESC as STRING)PURCHASE_ORDER_STATUS_DESC,
+cast(sales.SCHEDULED_DELIVERY_DATE as STRING) SCHEDULED_DELIVERY_DATE,
+    cast(sales.SCHEDULED_DELIVERY_TIME as STRING) SCHEDULED_DELIVERY_TIME,
+--cast(sales.FINAL_CASES_PERCENT_DELIVERED as STRING) FINAL_CASES_PERCENT_DELIVERED,
+--cast(sales.FINAL_LINES_DELIVERED as STRING) FINAL_LINES_DELIVERED,
+--cast(sales.FINAL_CASES_DELIVERED as STRING)FINAL_CASES_DELIVERED,
+--cast(sales.SHORT_PERCENT as STRING) SHORT_PERCENT,
+    --cast(sales.OVER_PERCENT as STRING) OVER_PERCENT,
+from `data-supplierdatahub-sit.automation_SDHdownload_dump.SDH_PO_CSV_Table` sales
+) aut
+ON
+IFNULL(TRIM(cast( bq.PURCHASE_ORDER_NUMBER as string)),'') = IFNULL(TRIM(cast( aut.PURCHASE_ORDER_NUMBER as string)),'')
+AND IFNULL(TRIM(cast( bq.ORDER_DATE as string)),'') = IFNULL(TRIM(cast(aut.ORDER_DATE as string)),'')
+ AND IFNULL(TRIM(cast( bq.LOCATION_ID as string)),'') = IFNULL(TRIM(cast( aut.LOCATION_ID as string)),'')
+AND IFNULL(TRIM(cast( bq.LOCATION_NAME as string)),'') = IFNULL(TRIM(cast( aut.LOCATION_NAME as string)),'')
+AND IFNULL(TRIM(cast( bq.SKU_ITEM_NBR as string)),'') = IFNULL(TRIM(cast( aut.ITEM_NUMBER as string)),'')
+AND IFNULL(TRIM(cast( bq.TUC as string)),'') = IFNULL(TRIM(cast(aut.TUC as string)),'')
+ AND IFNULL(TRIM(cast( bq.ITEM_NAME as string)),'') = IFNULL(TRIM(cast( aut.ITEM_DESCRIPTION as string)),'')
+AND IFNULL(TRIM(cast( bq.ORDR_QTY as string)),'') = IFNULL(TRIM(cast( aut.CASES_ORDER as string)),'')
+AND IFNULL(TRIM(cast( bq.RECEIVED_QUANTITY as string)),'') = IFNULL(TRIM(cast(aut.CASES_DELIVERED as string)),'')
+AND IFNULL(TRIM(cast( bq.PERCENTAGE_DELIVERED as string)),'') = IFNULL(TRIM(cast( aut.PERCENTAGE_DELIVERED as string)),'')
+AND IFNULL(TRIM(cast( bq.PURCHASE_ORDER_STATUS as string)),'') = IFNULL(TRIM(cast( aut.PURCHASE_ORDER_STATUS_DESC as string)),'')
+AND IFNULL(TRIM(cast( bq.SCHEDULED_DELIVERY_DATE as string)),'') = IFNULL(TRIM(cast( aut.SCHEDULED_DELIVERY_DATE as string)),'')
+AND IFNULL(TRIM(cast( bq.SCHEDULED_DELIVERY_TIME as string)),'') = IFNULL(TRIM(cast(aut.SCHEDULED_DELIVERY_TIME as string)),'')
+--AND IFNULL(TRIM(cast( bq.FINAL_CASES_PERCENT_DELIVERED as string)),'') = IFNULL(TRIM(cast(aut.FINAL_CASES_PERCENT_DELIVERED as string)),'')
+--AND IFNULL(TRIM(cast( bq.FINAL_LINES_DELIVERED as string)),'') = IFNULL(TRIM(cast( aut.FINAL_LINES_DELIVERED as string)),'')
+--AND IFNULL(TRIM(cast( bq.FINAL_CASES_DELIVERED as string)),'') = IFNULL(TRIM(cast( aut.FINAL_CASES_DELIVERED as string)),'')
+--AND IFNULL(TRIM(cast( bq.SHORT_PERCENT as string)),'') = IFNULL(TRIM(cast( aut.SHORT_PERCENT as string)),'')
+--AND IFNULL(TRIM(cast( bq.OVER_PERCENT as string)),'') = IFNULL(TRIM(cast(aut.OVER_PERCENT as string)),'')
+
+WHERE
+TRIM(cast(aut.PURCHASE_ORDER_NUMBER as string)) is NULL
+AND TRIM(cast( aut.ORDER_DATE as string)) is NULL
+AND TRIM(cast( aut.LOCATION_ID as string)) is NULL
+AND TRIM(cast( aut.LOCATION_NAME as string)) is NULL
+AND TRIM(cast( aut.ITEM_NUMBER as string)) is NULL
+AND TRIM(cast( aut.TUC as string)) is NULL
+AND TRIM(cast( aut.ITEM_DESCRIPTION as string)) is NULL
+AND TRIM(cast( aut.CASES_ORDER as string)) is NULL
+AND TRIM(cast( aut.CASES_DELIVERED as string)) is NULL
+AND TRIM(cast( aut.PERCENTAGE_DELIVERED as string)) is NULL
+AND TRIM(cast( aut.PURCHASE_ORDER_STATUS_DESC as string)) is NULL
+AND TRIM(cast( aut.SCHEDULED_DELIVERY_DATE as string)) is NULL
+AND TRIM(cast( aut.SCHEDULED_DELIVERY_TIME as string)) is NULL
+--AND TRIM(cast( aut.FINAL_CASES_PERCENT_DELIVERED as string)) is NULL
+--AND TRIM(cast( aut.FINAL_LINES_DELIVERED as string)) is NULL
+--AND TRIM(cast( aut.FINAL_CASES_DELIVERED as string)) is NULL
+--AND TRIM(cast( aut.SHORT_PERCENT as string)) is NULL
+--AND TRIM(cast( aut.OVER_PERCENT as string)) is NULL
+ 
+union all
+
+SELECT
+
+cast(aut.PURCHASE_ORDER_NUMBER as STRING),
+cast(aut.ORDER_DATE as STRING),
+ cast(aut.LOCATION_ID as STRING),
+ cast(aut.LOCATION_NAME as STRING),
+cast(aut.ITEM_NUMBER as STRING),
+cast(aut.TUC as string),
+cast(aut.ITEM_DESCRIPTION as string),
+ cast(aut.CASES_ORDER as STRING),
+ cast(aut.CASES_DELIVERED as STRING),
+cast(aut.PERCENTAGE_DELIVERED as string),
+cast(aut.PURCHASE_ORDER_STATUS_DESC as STRING),
+cast(aut.SCHEDULED_DELIVERY_DATE as string),
+cast(aut.SCHEDULED_DELIVERY_TIME as STRING),
+--cast(aut.FINAL_CASES_PERCENT_DELIVERED as STRING),
+--cast(aut.FINAL_LINES_DELIVERED as STRING),
+--cast(aut.FINAL_CASES_DELIVERED as string),
+--cast(aut.SHORT_PERCENT as STRING),
+--cast(aut.OVER_PERCENT as STRING) ,
+
+'CSV-BCK' AS DATA_MISMATCH
+FROM
+(
+SELECT sales.PURCHASE_ORDER_NUMBER,
+sales.ORDER_DATE ORDER_DATE,
+sales.LOCATION_ID LOCATION_ID,
+(sales.LOCATION_NAME) LOCATION_NAME,
+sales.ITEM_NUMBER ITEM_NUMBER,
+    sales.TUC TUC,
+sales.ITEM_DESCRIPTION ITEM_DESCRIPTION,
+sales.CASES_ORDER CASES_ORDER,
+sales.CASES_DELIVERED CASES_DELIVERED,
+(sales.PERCENTAGE_DELIVERED) PERCENTAGE_DELIVERED,
+(sales.PURCHASE_ORDER_STATUS_DESC) PURCHASE_ORDER_STATUS_DESC,
+(sales.SCHEDULED_DELIVERY_DATE) SCHEDULED_DELIVERY_DATE,
+    sales.SCHEDULED_DELIVERY_TIME SCHEDULED_DELIVERY_TIME,
+--sales.FINAL_CASES_PERCENT_DELIVERED FINAL_CASES_PERCENT_DELIVERED,
+--(sales.FINAL_LINES_DELIVERED) FINAL_LINES_DELIVERED,
+--(sales.FINAL_CASES_DELIVERED) FINAL_CASES_DELIVERED,
+--(sales.SHORT_PERCENT) SHORT_PERCENT,
+    --sales.OVER_PERCENT OVER_PERCENT,
+
+from `data-supplierdatahub-sit.automation_SDHdownload_dump.SDH_PO_CSV_Table` sales
+) aut
+LEFT OUTER JOIN
+(SELECT distinct
+                pchse_ordr_nbr PURCHASE_ORDER_NUMBER,
+                SUBSTR(CAST(orgnl_ordr_dt_key AS STRING), 7, 2) ||
+                       "/"||SUBSTR(CAST(orgnl_ordr_dt_key AS STRING), 5, 2) ||
+                       "/"||SUBSTR(CAST(orgnl_ordr_dt_key AS STRING), 1, 4)
+                ORDER_DATE,
+                bsns_unit_cd LOCATION_ID,
+                location_long_name LOCATION_NAME,
+                sku_item_nbr SKU_ITEM_NBR,
+                t.tuc TUC,
+                item_description ITEM_NAME,
+                (CASE WHEN CNCL_DT_KEY >= SCHL_DLVRY_DT_KEY THEN (IFNULL(ORDR_QTY,0) + IFNULL(CNCL_QTY,0)) ELSE IFNULL(ORDR_QTY,0) END) ORDR_QTY,
+                CASE
+                    WHEN QTY_RECEIVED_REPORTED IS NULL THEN 0
+                    ELSE QTY_RECEIVED_REPORTED
+                END AS RECEIVED_QUANTITY,
+                CASE
+                    WHEN QTY_RECEIVED_REPORTED IS NULL OR QTY_RECEIVED_REPORTED = 0 THEN "0 %"
+                    ELSE CONCAT(CAST(ROUND(((QTY_RECEIVED_REPORTED) / (CASE WHEN CNCL_DT_KEY >= SCHL_DLVRY_DT_KEY THEN (IFNULL(ORDR_QTY,0) + IFNULL(CNCL_QTY,0)) ELSE IFNULL(ORDR_QTY,0) END))* 100, 2)  AS STRING)," %")
+                END AS PERCENTAGE_DELIVERED,
+                purchase_order_status_map.pchse_ordr_status_desc PURCHASE_ORDER_STATUS,
+                 SUBSTR(CAST(DATE(schl_dlvry_dt) AS STRING), 9, 2) ||
+                       "/"||SUBSTR(CAST(DATE(schl_dlvry_dt) AS STRING), 6, 2) ||
+                       "/"||SUBSTR(CAST(DATE(schl_dlvry_dt) AS STRING), 1, 4) SCHEDULED_DELIVERY_DATE,
+                CAST(TIME(schl_dlvry_dt) AS STRING) SCHEDULED_DELIVERY_TIME
+             FROM
+                data-integration-uat.source_data_partitioned.DWV_X_PO_ITEM_STATE_GCP purchaseOrder,
+                data-integration-uat.supply_chain_tables.Item_Supplier_TUC t,
+                data-integration-uat.data_marts_dimensions.DIM_LOCATION_CURRENT location,
+                data-integration-uat.data_marts_dimensions.DIM_PRODUCT_CURRENT product,
+                data-supplierdatahub-sit.references.DWR_VNDR_ITEM dwr_vndr_item,
+                data-supplierdatahub-sit.references.purchase_order_status_map purchase_order_status_map
+             WHERE
+                DATE(purchaseOrder.trx_dt) >= "2022-10-25"
+                AND DATE(purchaseOrder.trx_dt) <= "2022-11-05"
+                AND CAST(purchaseOrder.bsns_unit_cd AS INT64) = CAST(location.location_id AS INT64)
+                AND CAST(purchaseOrder.sku_item_nbr AS INT64) = CAST(product.sku_item_number AS INT64)
+                AND CAST(t.ITEM AS INT64) = CAST(purchaseOrder.sku_item_nbr AS INT64)
+                AND t.ebs_supplier_number=CAST("1001904"  AS INT64)
+                AND dwr_vndr_item.vndr_item_nbr = product.sku_item_number
+                AND DATE(purchaseOrder.trx_dt) = dwr_vndr_item.ACTIVE_DATE
+                AND UPPER(purchase_order_status_map.pchse_ordr_status) = UPPER(purchaseOrder.pchse_ordr_status)
+                AND ORDR_QTY_REPORTED > 0
+                AND purchaseOrder.pchse_ordr_status IS NOT NULL
+                AND UPPER(location.location_id) IS NOT NULL
+                AND UPPER(IFNULL(purchaseOrder.sku_item_nbr,"NULLVALUE")) IS NOT NULL
+                AND UPPER(location.status_code) != "I"
+                AND dwr_vndr_item.vndr_nbr = "1001904"
+                AND purchaseOrder.VNDR_NBR = "1001904"
+            ORDER BY
+                order_date DESC,purchase_Order_Number ASC
+)bq
+ON
+IFNULL(TRIM(cast( bq.PURCHASE_ORDER_NUMBER as string)),'') = IFNULL(TRIM(cast( aut.PURCHASE_ORDER_NUMBER as string)),'')
+AND IFNULL(TRIM(cast( bq.ORDER_DATE as string)),'') = IFNULL(TRIM(cast(aut.ORDER_DATE as string)),'')
+AND IFNULL(TRIM(cast( bq.LOCATION_ID as string)),'') = IFNULL(TRIM(cast( aut.LOCATION_ID as string)),'')
+AND IFNULL(TRIM(cast( bq.LOCATION_NAME as string)),'') = IFNULL(TRIM(cast( aut.LOCATION_NAME as string)),'')
+AND IFNULL(TRIM(cast( bq.SKU_ITEM_NBR as string)),'') = IFNULL(TRIM(cast( aut.ITEM_NUMBER as string)),'')
+AND IFNULL(TRIM(cast( bq.TUC as string)),'') = IFNULL(TRIM(cast(aut.TUC as string)),'')
+AND IFNULL(TRIM(cast( bq.ITEM_NAME as string)),'') = IFNULL(TRIM(cast( aut.ITEM_DESCRIPTION as string)),'')
+AND IFNULL(TRIM(cast( bq.ORDR_QTY as string)),'') = IFNULL(TRIM(cast( aut.CASES_ORDER as string)),'')
+AND IFNULL(TRIM(cast( bq.RECEIVED_QUANTITY as string)),'') = IFNULL(TRIM(cast(aut.CASES_DELIVERED as string)),'')
+AND IFNULL(TRIM(cast( bq.PERCENTAGE_DELIVERED as string)),'') = IFNULL(TRIM(cast( aut.PERCENTAGE_DELIVERED as string)),'')
+AND IFNULL(TRIM(cast( bq.PURCHASE_ORDER_STATUS as string)),'') = IFNULL(TRIM(cast( aut.PURCHASE_ORDER_STATUS_DESC as string)),'')
+AND IFNULL(TRIM(cast( bq.SCHEDULED_DELIVERY_DATE as string)),'') = IFNULL(TRIM(cast( aut.SCHEDULED_DELIVERY_DATE as string)),'')
+AND IFNULL(TRIM(cast( bq.SCHEDULED_DELIVERY_TIME as string)),'') = IFNULL(TRIM(cast(aut.SCHEDULED_DELIVERY_TIME as string)),'')
+--AND IFNULL(TRIM(cast( bq.FINAL_CASES_PERCENT_DELIVERED as string)),'') = IFNULL(TRIM(cast(aut.FINAL_CASES_PERCENT_DELIVERED as string)),'')
+--AND IFNULL(TRIM(cast( bq.FINAL_LINES_DELIVERED as string)),'') = IFNULL(TRIM(cast( aut.FINAL_LINES_DELIVERED as string)),'')
+--AND IFNULL(TRIM(cast( bq.FINAL_CASES_DELIVERED as string)),'') = IFNULL(TRIM(cast( aut.FINAL_CASES_DELIVERED as string)),'')
+--AND IFNULL(TRIM(cast( bq.SHORT_PERCENT as string)),'') = IFNULL(TRIM(cast( aut.SHORT_PERCENT as string)),'')
+--AND IFNULL(TRIM(cast( bq.OVER_PERCENT as string)),'') = IFNULL(TRIM(cast(aut.OVER_PERCENT as string)),'')
+
+WHERE
+TRIM(cast(bq.PURCHASE_ORDER_NUMBER as string)) is NULL
+AND TRIM(cast( bq.ORDER_DATE as string)) is NULL
+AND TRIM(cast( bq.LOCATION_ID as string)) is NULL
+AND TRIM(cast( bq.LOCATION_NAME as string)) is NULL
+AND TRIM(cast( bq.SKU_ITEM_NBR as string)) is NULL
+AND TRIM(cast( bq.TUC as string)) is NULL
+AND TRIM(cast( bq.ITEM_NAME as string)) is NULL
+AND TRIM(cast(bq.ORDR_QTY as string)) is NULL
+AND TRIM(cast( bq.RECEIVED_QUANTITY as string)) is NULL
+AND TRIM(cast( bq.PERCENTAGE_DELIVERED as string)) is NULL
+AND TRIM(cast( bq.PURCHASE_ORDER_STATUS as string)) is NULL
+AND TRIM(cast( bq.SCHEDULED_DELIVERY_DATE as string)) is NULL
+AND TRIM(cast( bq.SCHEDULED_DELIVERY_TIME as string)) is NULL
+--AND TRIM(cast( bq.FINAL_CASES_PERCENT_DELIVERED as string)) is NULL
+--AND TRIM(cast( bq.FINAL_LINES_DELIVERED as string)) is NULL
+--AND TRIM(cast( bq.FINAL_CASES_DELIVERED as string)) is NULL
+--AND TRIM(cast( bq.SHORT_PERCENT as string)) is NULL
+--AND TRIM(cast( bq.OVER_PERCENT as string)) is NULL
+
+)A
